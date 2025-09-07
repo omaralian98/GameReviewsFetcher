@@ -227,7 +227,7 @@ public class DefaultExcelExportService(IStoreColumnProvider columnProvider) : IE
                 if (cellValue.IsNumeric())
                 {
                     if (double.TryParse(Convert.ToString(cellValue), NumberStyles.Any, CultureInfo.InvariantCulture,
-                            out var doubleValue))
+                            out double doubleValue))
                     {
                         cell.Value = doubleValue;
                     }
