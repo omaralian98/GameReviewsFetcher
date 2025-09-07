@@ -2,5 +2,6 @@
 
 public enum Store
 {
+    Default,
     Steam
 }
