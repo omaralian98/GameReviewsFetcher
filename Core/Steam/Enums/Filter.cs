@@ -3,6 +3,5 @@
 public enum Filter
 {
     Recent,
-    All,
     Updated
 }
