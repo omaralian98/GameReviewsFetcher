@@ -1,0 +1,24 @@
+﻿<div class="mb-4">
+    <a href="https://chromewebstore.google.com/detail/cors-unblock/lfhmikememgdcahcdlaciloancbhjino" 
+       target="_blank" class="btn btn-outline-info">
+        <i class="bi bi-download me-2"></i>
+        Install CORS Unblock Extension
+    </a>
+</div>
+
+<SteamGameSearch @bind-SelectedGame="@SelectedGame" />
+
+@if (SelectedGame != null)
+{
+    <SteamReviewFilters @bind-FilterParameters="@FilterParameters" />
+
+    <SteamReviewDisplay SelectedGame="@SelectedGame" @bind-FilterParameters="@FilterParameters" />
+}
+
+
+@code {
+        
+    private Game? SelectedGame { get; set; }
+    
+    private SteamReviewQueryParameters FilterParameters { get; set; } = new();
+}

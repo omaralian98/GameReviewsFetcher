@@ -1,7 +1,32 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Game Reviews</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="container">
+    <div class="text-center mb-5">
+        <h1 class="display-4 fw-bold text-primary">
+            <i class="bi bi-controller me-3"></i>
+            Game Reviews Fetcher
+        </h1>
+        <p class="lead text-muted">Extract and export game reviews from various stores</p>
+    </div>
+    
+    <StoreSelector @bind-SelectedStore="SelectedStore" />
 
-Welcome to your new app.
+    @switch (SelectedStore)
+    {
+        case Store.Default:
+            <p>Please select a store</p>
+            break;
+        case Store.Steam:
+            <SteamPage></SteamPage>
+            break;
+        default:
+            <p>Please select a store</p>
+            break;
+    }
+</div>
+
+@code {
+    private Store SelectedStore { get; set; } = Store.Default;
+}

@@ -1,0 +1,47 @@
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-primary text-white">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-shop me-2"></i>
+            <h5 class="mb-0">Select Game Store</h5>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <label for="storeSelect" class="form-label fw-bold">Choose a store:</label>
+                <InputSelect id="storeSelect" @bind-Value="SelectedStore" @bind-Value:after="Select" class="form-select form-select-lg">
+                    <option value="" selected="@SelectedStore == Store.Default">-- Select Store --</option>
+                    <option value="Steam">Steam</option>
+                </InputSelect>
+            </div>
+        </div>
+        
+        @if (SelectedStore != Store.Default)
+        {
+            <div class="mt-4">
+                <div class="alert alert-success d-flex align-items-center">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    <div>
+                        <strong>Selected Store:</strong> @SelectedStore
+                        @if (SelectedStore == Store.Steam)
+                        {
+                            <div class="mt-2">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/512px-Steam_icon_logo.svg.png?20220611141426" alt="Steam" style="height: 30px;" />
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Store SelectedStore { get; set; } = Store.Default;
+    [Parameter] public EventCallback<Store> SelectedStoreChanged { get; set; }
+
+    async Task Select()
+    {
+        await SelectedStoreChanged.InvokeAsync(SelectedStore);
+    }
+}

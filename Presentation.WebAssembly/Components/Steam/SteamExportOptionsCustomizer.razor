@@ -1,0 +1,496 @@
+@inject IStoreColumnProviderFactory StoreColumnProviderFactory
+@inject IStoreExportServiceFactory ExportServiceFactory
+@inject IJSRuntime JsRuntime
+
+<!-- Modal -->
+<div class="modal fade" id="exportCustomizationModal" tabindex="-1" aria-labelledby="exportCustomizationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportCustomizationModalLabel">
+                    <i class="bi bi-gear me-2"></i>
+                    Export Customization
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (AvailableColumns.Any())
+                {
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6>Export Format:</h6>
+                            <select @bind="ExportOptions.Format" @bind:after="OnFormatChanged" class="form-select mb-3">
+                                @foreach (var format in SupportedFormats)
+                                {
+                                    <option value="@format">@format</option>
+                                }
+                            </select>
+                            
+                            <h6>Available Columns:</h6>
+                            <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                                @foreach (var column in AvailableColumns)
+                                {
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" 
+                                               id="col_@column.Key" 
+                                               checked="@IsColumnSelected(column.Key)"
+                                               @onchange="@(() => ToggleColumn(column.Key))" />
+                                        <label class="form-check-label" for="col_@column.Key">
+                                            <strong>@column.DisplayName</strong>
+                                            @if (!string.IsNullOrEmpty(column.Description))
+                                            {
+                                                <br><small class="text-muted">@column.Description</small>
+                                            }
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <h6>Selected Columns (Drag to reorder):</h6>
+                            <div class="border rounded p-3" style="min-height: 200px;">
+                                @if (ExportOptions.SelectedColumns.Any())
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var (column, index) in ExportOptions.SelectedColumns.Select((c, i) => (c, i)))
+                                        {
+                                            <div class="d-flex align-items-center p-2 border rounded bg-light draggable-item" 
+                                                 draggable="true" 
+                                                 data-index="@index"
+                                                 @ondragstart="@(() => OnDragStart(index))"
+                                                 @ondragover:preventDefault="true"
+                                                 @ondrop="@(() => OnDrop(index))">
+                                                <i class="bi bi-grip-vertical me-2 text-muted drag-handle"></i>
+                                                <span class="me-2 text-muted order-number">@(index + 1)</span>
+                                                <span class="flex-grow-1">@column.DisplayName</span>
+                                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" 
+                                                        @onclick="@(() => RemoveColumn(column.Key))">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="text-muted text-center py-3">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        Select columns from the left
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <h6>Preview:</h6>
+                            <div class="border rounded p-3 bg-light" style="max-height: 400px; overflow-y: auto;">
+                                @if (PreviewData.Any())
+                                {
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered">
+                                            <thead class="table-dark">
+                                                <tr>
+                                                    @foreach (var column in ExportOptions.SelectedColumns)
+                                                    {
+                                                        <th>@column.DisplayName</th>
+                                                    }
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var row in PreviewData.Take(5))
+                                                {
+                                                    <tr>
+                                                        @foreach (var column in ExportOptions.SelectedColumns)
+                                                        {
+                                                            <td>@row[column.Key]</td>
+                                                        }
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    @if (PreviewData.Count > 5)
+                                    {
+                                        <small class="text-muted">Showing first 5 rows of @PreviewData.Count total rows</small>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="text-muted text-center py-3">
+                                        <i class="bi bi-eye me-2"></i>
+                                        Preview will appear here
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    
+                    @if (ExportOptions.Format == ExportFormat.Excel)
+                    {
+                        <div class="mt-4">
+                            <h6>Excel Formatting Options:</h6>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <label class="form-label">Header Background Color:</label>
+                                    <input type="color" @bind="ExportOptions.ExcelFormatOptions.HeaderBackgroundColor" @bind:after="OnExcelOptionsChanged" class="form-control form-control-color" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Header Text Color:</label>
+                                    <input type="color" @bind="ExportOptions.ExcelFormatOptions.HeaderTextColor" @bind:after="OnExcelOptionsChanged" class="form-control form-control-color" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Alternating Row Color:</label>
+                                    <input type="color" @bind="ExportOptions.ExcelFormatOptions.AlternatingRowColor" @bind:after="OnExcelOptionsChanged" class="form-control form-control-color" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Sheet Name:</label>
+                                    <input type="text" @bind="ExportOptions.ExcelFormatOptions.SheetName" @bind:after="OnExcelOptionsChanged" class="form-control" />
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3">
+                                    <label class="form-label">Header Font Size:</label>
+                                    <input type="number" @bind="ExportOptions.ExcelFormatOptions.HeaderFontSize" @bind:after="OnExcelOptionsChanged" class="form-control" min="8" max="24" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Data Font Size:</label>
+                                    <input type="number" @bind="ExportOptions.ExcelFormatOptions.DataFontSize" @bind:after="OnExcelOptionsChanged" class="form-control" min="8" max="18" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Row Height:</label>
+                                    <input type="number" @bind="ExportOptions.ExcelFormatOptions.RowHeight" @bind:after="OnExcelOptionsChanged" class="form-control" min="15" max="50" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Border Style:</label>
+                                    <select @bind="ExportOptions.ExcelFormatOptions.BorderStyle" @bind:after="OnExcelOptionsChanged" class="form-select">
+                                        <option value="thin">Thin</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="thick">Thick</option>
+                                        <option value="none">None</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.HeaderBold" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Header Bold</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.UseAlternatingRows" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Alternating Rows</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.AutoFitColumns" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Auto-fit Columns</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.FreezeHeaderRow" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Freeze Header</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.AddFilters" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Add Auto-Filters</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.WrapText" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Wrap Text</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.CenterHeaders" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Center Headers</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="ExportOptions.ExcelFormatOptions.AddBorders" @bind:after="OnExcelOptionsChanged" />
+                                        <label class="form-check-label">Add Borders</label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            @if (ExportOptions.Format == ExportFormat.Excel)
+                            {
+                                <div class="mt-3">
+                                    <h6>Excel Preview:</h6>
+                                    <div class="border rounded p-3 bg-white excel-preview">
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered mb-0" style="font-family: 'Segoe UI', Arial, sans-serif; font-size: @(ExportOptions.ExcelFormatOptions.DataFontSize)px;">
+                                                <thead style="background-color: @ExportOptions.ExcelFormatOptions.HeaderBackgroundColor; color: @ExportOptions.ExcelFormatOptions.HeaderTextColor; font-weight: @(ExportOptions.ExcelFormatOptions.HeaderBold ? "bold" : "normal"); font-size: @(ExportOptions.ExcelFormatOptions.HeaderFontSize)px; text-align: @(ExportOptions.ExcelFormatOptions.CenterHeaders ? "center" : "left");">
+                                                    <tr>
+                                                        @foreach (var column in ExportOptions.SelectedColumns)
+                                                        {
+                                                            <th style="border: @(ExportOptions.ExcelFormatOptions.AddBorders ? "1px solid #d0d7de" : "none"); padding: 4px 8px; white-space: @(ExportOptions.ExcelFormatOptions.WrapText ? "normal" : "nowrap");">@column.DisplayName</th>
+                                                        }
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var (row, index) in PreviewData.Take(3).Select((r, i) => (r, i)))
+                                                    {
+                                                        <tr style="background-color: @(ExportOptions.ExcelFormatOptions.UseAlternatingRows && index % 2 == 1 ? ExportOptions.ExcelFormatOptions.AlternatingRowColor : "transparent"); height: @(ExportOptions.ExcelFormatOptions.RowHeight)px;">
+                                                            @foreach (var column in ExportOptions.SelectedColumns)
+                                                            {
+                                                                <td style="border: @(ExportOptions.ExcelFormatOptions.AddBorders ? "1px solid #d0d7de" : "none"); padding: 4px 8px; white-space: @(ExportOptions.ExcelFormatOptions.WrapText ? "normal" : "nowrap");">@row[column.Key]</td>
+                                                            }
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                Excel preview showing: @(ExportOptions.ExcelFormatOptions.HeaderBold ? "Bold headers, " : "")@(ExportOptions.ExcelFormatOptions.UseAlternatingRows ? "Alternating rows, " : "")@(ExportOptions.ExcelFormatOptions.AutoFitColumns ? "Auto-fit columns, " : "")@(ExportOptions.ExcelFormatOptions.FreezeHeaderRow ? "Frozen header, " : "")@(ExportOptions.ExcelFormatOptions.AddFilters ? "Auto-filters, " : "")@(ExportOptions.ExcelFormatOptions.WrapText ? "Wrapped text, " : "")@(ExportOptions.ExcelFormatOptions.CenterHeaders ? "Centered headers, " : "")@(ExportOptions.ExcelFormatOptions.AddBorders ? "Borders" : "No borders")
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    
+                    <div class="mt-4">
+                        <h6>Review Separation Options:</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                @foreach (var mode in Enum.GetValues<ReviewSeparationMode>())
+                                {
+                                    var modeId = $"reviewSeparation_{mode}";
+                                    var modeLabel = mode switch
+                                    {
+                                        ReviewSeparationMode.Single => "Single file with all reviews",
+                                        ReviewSeparationMode.Separate => "Separate files (positive/negative)",
+                                        ReviewSeparationMode.Sheets => "Same file, separate sheets",
+                                        _ => mode.ToString()
+                                    };
+                                    
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="reviewSeparation" id="@modeId" @onchange="@(() => ExportOptions.ReviewSeparationMode = mode)" checked="@(ExportOptions.ReviewSeparationMode == mode)" />
+                                        <label class="form-check-label" for="@modeId">
+                                            @modeLabel
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2">Loading available columns...</p>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="ApplyCustomization">Apply Customization</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<Review> Reviews { get; set; } = [];
+    [Parameter] public Game? SelectedGame { get; set; }
+
+    [Parameter] public SteamExportOptions ExportOptions { get; set; } = new();
+    [Parameter] public EventCallback<SteamExportOptions> ExportOptionsChanged { get; set; }
+    
+    private List<ExportColumn> AvailableColumns { get; set; } = [];
+
+    
+    private List<Dictionary<string, object>> PreviewData { get; set; } = [];
+    private List<ExportFormat> SupportedFormats { get; set; } = [];
+    
+    
+    private int DraggedIndex { get; set; } = -1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAvailableColumns();
+        SupportedFormats = (await ExportServiceFactory.GetSupportedFormats(Store.Steam)).ToList();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Reviews.Any() && SelectedGame != null)
+        {
+            await GeneratePreview();
+        }
+
+        ExportOptions.ExcelFormatOptions ??= new ExcelFormatOptions();
+    }
+
+    private async Task LoadAvailableColumns()
+    {
+        var provider = await StoreColumnProviderFactory.GetProviderAsync(Store.Steam);
+        AvailableColumns = await provider.GetAvailableColumnsAsync();
+        
+        var defaultColumns = AvailableColumns
+            .Where(c => c.IsDefault)
+            .OrderBy(c => c.Index)
+            .ToList();
+        
+        ExportOptions.SelectedColumns = defaultColumns
+            .Select(c => new ExportColumnSelection
+            {
+                Key = c.Key,
+                DisplayName = c.DisplayName,
+                IsSelected = true,
+                Order = c.Index,
+                DataType = c.DataType
+            })
+            .ToList();
+    }
+
+    
+    
+    
+    private async Task OnFormatChanged()
+    {
+        if (Reviews.Any() && SelectedGame != null)
+        {
+            await GeneratePreview();
+        }
+    }
+
+    private async Task OnExcelOptionsChanged()
+    {
+        if (ExportOptions.Format == ExportFormat.Excel && Reviews.Any() && SelectedGame != null)
+        {
+            await GeneratePreview();
+        }
+    }
+
+    private bool IsColumnSelected(string key)
+    {
+        return ExportOptions.SelectedColumns.Any(c => c.Key == key && c.IsSelected);
+    }
+
+    private async Task ToggleColumn(string key)
+    {
+        var column = AvailableColumns.FirstOrDefault(c => c.Key == key);
+        if (column == null) return;
+
+        var existing = ExportOptions.SelectedColumns.FirstOrDefault(c => c.Key == key);
+        if (existing != null)
+        {
+            existing.IsSelected = !existing.IsSelected;
+            if (!existing.IsSelected)
+            {
+                ExportOptions.SelectedColumns.Remove(existing);
+            }
+        }
+        else
+        {
+            var newSelection = new ExportColumnSelection
+            {
+                Key = column.Key,
+                DisplayName = column.DisplayName,
+                IsSelected = true,
+                Order = ExportOptions.SelectedColumns.Count + 1,
+                DataType = column.DataType
+            };
+            ExportOptions.SelectedColumns.Add(newSelection);
+        }
+
+        if (Reviews.Any() && SelectedGame != null)
+        {
+            await GeneratePreview();
+        }
+    }
+
+    private async Task RemoveColumn(string key)
+    {
+        var column = ExportOptions.SelectedColumns.FirstOrDefault(c => c.Key == key);
+        if (column != null)
+        {
+            column.IsSelected = false;
+            ExportOptions.SelectedColumns.Remove(column);
+            if (Reviews.Any() && SelectedGame != null)
+            {
+                await GeneratePreview();
+            }
+        }
+    }
+
+    private void OnDragStart(int index)
+    {
+        DraggedIndex = index;
+        JsRuntime.InvokeVoidAsync("setDragData", index);
+    }
+
+    private void OnDragOver(int index)
+    {
+        // Allow drop - preventDefault is handled by @ondragover:preventDefault="true"
+    }
+
+    private async Task OnDrop(int targetIndex)
+    {
+        if (DraggedIndex >= 0 && DraggedIndex != targetIndex)
+        {
+            var draggedItem = ExportOptions.SelectedColumns[DraggedIndex];
+            ExportOptions.SelectedColumns.RemoveAt(DraggedIndex);
+            
+            var newIndex = targetIndex > DraggedIndex ? targetIndex - 1 : targetIndex;
+            ExportOptions.SelectedColumns.Insert(newIndex, draggedItem);
+            
+            // Update order numbers
+            for (int i = 0; i < ExportOptions.SelectedColumns.Count; i++)
+            {
+                ExportOptions.SelectedColumns[i].Order = i + 1;
+            }
+            
+            if (Reviews.Any() && SelectedGame != null)
+            {
+                await GeneratePreview();
+            }
+        }
+        DraggedIndex = -1;
+    }
+
+    private async Task GeneratePreview()
+    {
+        if (!Reviews.Any() || SelectedGame == null) return;
+
+        // var customization = new op
+        // {
+        //     Format = ExportOptions.Format,
+        //     ExportOptions.SelectedColumns = ExportOptions.SelectedColumns.ToList(),
+        //     FormatSpecificOptions = new Dictionary<string, object>
+        //     {
+        //         ["ReviewSeparationMode"] = ReviewSeparationMode
+        //     }
+        // };
+        //
+        // PreviewData = await ExportCustomizationService.GeneratePreviewDataAsync(
+        //     Reviews, SelectedGame, customization, StoreColumnProvider);
+        
+        StateHasChanged();
+    }
+
+    private async Task ApplyCustomization()
+    {
+        await ExportOptionsChanged.InvokeAsync(ExportOptions);
+        
+        // Close modal
+        await JsRuntime.InvokeVoidAsync("closeModal", "exportCustomizationModal");
+    }
+}

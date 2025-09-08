@@ -1,0 +1,303 @@
+@inject IGameStoreReviewsFetcher GameStoreReviewsFetcher
+@inject IStoreExportServiceFactory ExportServiceFactory
+@inject IJSRuntime JsRuntime
+
+<div class="card mb-4 shadow-sm" id="review-display">
+    <div class="card-header bg-warning text-dark">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-star me-2"></i>
+            <h5 class="mb-0">Reviews Export</h5>
+        </div>
+    </div>
+    <div class="card-body">
+        @if (SelectedGame != null)
+        {
+            <div class="alert alert-info mb-3">
+                <strong>Selected Game:</strong> @SelectedGame.Name (ID: @SelectedGame.Id)
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning mb-3">
+                Please search and select a game first to fetch its reviews.
+            </div>
+        }
+        
+        @if (IsLoadingSummary)
+        {
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Review Summary</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-center" style="min-height: 100px;">
+                        <div class="spinner-border text-primary me-3" role="status"></div>
+                        <span>Loading review summary...</span>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (ReviewSummary != null)
+        {
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Review Summary</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary">@ReviewSummary.ReviewScore</h4>
+                                <small class="text-muted">Overall Score</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-success">@ReviewSummary.TotalPositive</h4>
+                                <small class="text-muted">Positive Reviews</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-danger">@ReviewSummary.TotalNegative</h4>
+                                <small class="text-muted">Negative Reviews</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-info">@GameReviews.Count / @ReviewSummary.TotalReviews</h4>
+                                <small class="text-muted">Fetched / Total Reviews</small>
+                            </div>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(ReviewSummary.ReviewScoreDescription))
+                    {
+                        <div class="mt-2 text-center">
+                            <span class="badge bg-secondary">@ReviewSummary.ReviewScoreDescription</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        
+        <div class="mb-3">
+            <button @onclick="FetchReviews" class="btn btn-primary me-2" disabled="@(IsLoading || SelectedGame == null)">
+                @(IsLoading ? "Fetching..." : "Fetch Reviews")
+            </button>
+            
+            @if (IsCancelable)
+            {
+                <button @onclick="Cancel" class="btn btn-secondary me-2">Cancel</button>
+            }
+            
+            @if (GameReviews.Any())
+            {
+                <button @onclick="OpenCustomizationModal" class="btn btn-outline-primary me-2">
+                    <i class="bi bi-gear me-2"></i>Customize Export
+                </button>
+                <button @onclick="ExportReviews" class="btn btn-success" disabled="@IsExporting">
+                    @(IsExporting ? "Exporting..." : "Export")
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@if (IsLoading)
+{
+    <div class="alert alert-info">
+        <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+            Loading reviews... (@GameReviews.Count fetched so far)
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(ErrorMessage))
+{
+    <div class="alert alert-danger">
+        <strong>Error:</strong> @ErrorMessage
+    </div>
+}
+
+@* Reviews display is hidden - data is fetched for export only *@
+@if (GameReviews.Any())
+{
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        <strong>@GameReviews.Count reviews fetched successfully!</strong> Click "Customize Export" to configure your export options, then click "Export" to download the data.
+    </div>
+    
+    <!-- Export Customization Modal -->
+    <SteamExportOptionsCustomizer @bind-ExportOptions="ExportOptions" Reviews="@GameReviews" SelectedGame="@SelectedGame" />
+}
+
+@code {
+    [Parameter] public Game? SelectedGame { get; set; }
+    [Parameter] public SteamReviewQueryParameters FilterParameters { get; set; } = new();
+    [Parameter] public EventCallback<SteamReviewQueryParameters> FilterParametersChanged { get; set; }
+    
+    private List<Review> GameReviews { get; set; } = [];
+    private SteamGameReviewsQuerySummary? ReviewSummary { get; set; }
+    private string? ErrorMessage { get; set; } = string.Empty;
+    private bool IsLoading { get; set; } = false;
+    private bool IsLoadingSummary { get; set; } = false;
+    private bool IsCancelable { get; set; } = false;
+    private bool IsExporting { get; set; } = false;
+    private CancellationTokenSource CancellationTokenSource { get; set; } = new CancellationTokenSource();
+
+    private SteamExportOptions ExportOptions { get; set; } = new SteamExportOptions();
+    
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SelectedGame != null)
+        {
+            await LoadReviewSummary();
+            await ScrollToSection();
+        }
+    }
+
+    private async Task LoadReviewSummary()
+    {
+        if (SelectedGame == null) return;
+
+        try
+        {
+            ErrorMessage = null;
+            IsLoadingSummary = true;
+            await InvokeAsync(StateHasChanged);
+            
+            var parameters = new SteamReviewQueryParameters
+            {
+                Filter = FilterParameters.Filter,
+                NumPerPage = FilterParameters.NumPerPage,
+                Languages = FilterParameters.Languages,
+                ReviewType = FilterParameters.ReviewType,
+                PurchaseType = FilterParameters.PurchaseType,
+                FilterOffTopicActivity = FilterParameters.FilterOffTopicActivity
+            };
+
+            var summary = await GameStoreReviewsFetcher.FetchReviewsSummaryAsync(SelectedGame.Id, parameters, CancellationToken.None);
+            ReviewSummary = summary as SteamGameReviewsQuerySummary;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to load review summary: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingSummary = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task FetchReviews()
+    {
+        if (SelectedGame == null)
+        {
+            ErrorMessage = "Please select a game first.";
+            return;
+        }
+
+        try
+        {
+            ErrorMessage = null;
+            IsLoading = true;
+            IsCancelable = true;
+            GameReviews.Clear();
+
+            // Let the UI render the loading state and Cancel button immediately
+            await InvokeAsync(StateHasChanged);
+            await Task.Yield();
+
+            var parameters = new SteamReviewQueryParameters
+            {
+                Filter = FilterParameters.Filter,
+                NumPerPage = FilterParameters.NumPerPage,
+                Languages = FilterParameters.Languages,
+                ReviewType = FilterParameters.ReviewType,
+                PurchaseType = FilterParameters.PurchaseType,
+                FilterOffTopicActivity = FilterParameters.FilterOffTopicActivity
+            };
+
+            var reviews = GameStoreReviewsFetcher.FetchReviewsAsync(SelectedGame.Id, parameters, CancellationTokenSource.Token);
+
+            await foreach (var item in reviews)
+            {
+                GameReviews.Add(item);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+            IsCancelable = false;
+            CancellationTokenSource = new CancellationTokenSource();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task Cancel()
+    {
+        await CancellationTokenSource.CancelAsync();
+    }
+
+    private async Task ScrollToSection()
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("scrollToElement", "review-display");
+        }
+        catch
+        {
+            // Ignore scroll errors
+        }
+    }
+
+    private async Task OpenCustomizationModal()
+    {
+        await JsRuntime.InvokeVoidAsync("showModal", "exportCustomizationModal");
+    }
+
+    private async Task ExportReviews()
+    {
+        if (!GameReviews.Any() || SelectedGame == null)
+        {
+            ErrorMessage = "No reviews to export or customization not set.";
+            return;
+        }
+
+        try
+        {
+            IsExporting = true;
+            await InvokeAsync(StateHasChanged);
+            
+            var exportService = await ExportServiceFactory.GetService(Store.Steam, ExportOptions.Format);
+
+            var result = await exportService.ExportReviewsAsync(GameReviews, SelectedGame, ExportOptions);
+
+            foreach (var file in result.ExportationFiles)
+            {
+                var base64Content = Convert.ToBase64String(file.Content);
+                await JsRuntime.InvokeVoidAsync("downloadFileFromBase64", file.FileName, file.MimeType, base64Content);
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Export failed: {ex.Message}";
+        }
+        finally
+        {
+            IsExporting = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}

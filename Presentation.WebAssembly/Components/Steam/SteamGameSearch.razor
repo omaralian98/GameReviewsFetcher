@@ -1,0 +1,168 @@
+@inject ISteamStoreGamesFetcher SteamGamesFetcher
+@inject IJSRuntime JsRuntime
+@implements IDisposable
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-success text-white">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-search me-2"></i>
+            <h5 class="mb-0">Search Steam Games</h5>
+        </div>
+    </div>
+    <div class="card-body">
+        <EditForm Model="@this" OnValidSubmit="@(() => SearchGames(false))">
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col-md-8">
+                    <InputText id="searchInput" @bind-Value="SearchQuery" class="form-control" placeholder="Enter game name to search..." 
+                               disabled="@IsSearching" />
+                    <ValidationMessage For="@(() => SearchQuery)" />
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100" disabled="@IsSearching">
+                        @(IsSearching && !IsDeepSearch ? "Searching..." : "Search")
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" @onclick="() => SearchGames(true)" class="btn btn-success w-100" disabled="@IsSearching">
+                        @(IsSearching && IsDeepSearch ? "Deep Searching..." : "Deep Search")
+                    </button>
+                </div>
+            </div>
+        </EditForm>
+        
+        @if (IsSearching)
+        {
+            <div class="mt-2">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    @(IsDeepSearch ? "Deep searching" : "Searching") for games... (@SearchResults.Count found so far)
+                </div>
+            </div>
+        }
+        
+        @if (!string.IsNullOrWhiteSpace(SearchErrorMessage))
+        {
+            <div class="alert alert-danger mt-2">
+                <strong>Search Error:</strong> @SearchErrorMessage
+            </div>
+        }
+        
+        @if (SearchResults.Any())
+        {
+            <div class="mt-3" id="search-results">
+                <h6>Search Results (@SearchResults.Count games found):</h6>
+                <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+                    @foreach (var game in SearchResults.Take(50)) // Limit to first 50 results
+                    {
+                        <button type="button" 
+                                class="list-group-item list-group-item-action @(SelectedGame?.Id == game.Id ? "active" : "")"
+                                @onclick="() => ToggleGameSelection(game)">
+                            <div class="d-flex w-100 justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    @if (!string.IsNullOrEmpty(game.ImageUrl))
+                                    {
+                                        <img src="@game.ImageUrl" alt="@game.Name" class="me-3" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;" />
+                                    }
+                                    <div>
+                                        <h6 class="mb-1">@game.Name</h6>
+                                        <small class="text-muted">ID: @game.Id</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Game? SelectedGame { get; set; }
+    [Parameter] public EventCallback<Game?> SelectedGameChanged { get; set; }
+
+    [Required(ErrorMessage = "Please enter a search query")]
+    [MinLength(1, ErrorMessage = "Search query cannot be empty")]
+    public string SearchQuery { get; set; } = string.Empty;
+    
+    private List<Game> SearchResults { get; set; } = [];
+    private bool IsSearching { get; set; } = false;
+    private bool IsDeepSearch { get; set; } = false;
+    private string? SearchErrorMessage { get; set; } = string.Empty;
+    private CancellationTokenSource SearchCancellationTokenSource { get; set; } = new();
+
+    private async Task SearchGames(bool isDeepSearch)
+    {
+        if (string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            SearchErrorMessage = "Please enter a search query.";
+            return;
+        }
+
+        try
+        {
+            SearchErrorMessage = null;
+            IsSearching = true;
+            IsDeepSearch = isDeepSearch;
+            SearchResults.Clear();
+
+            await InvokeAsync(StateHasChanged);
+            await Task.Yield();
+
+            var games = isDeepSearch 
+                ? SteamGamesFetcher.DeepSearchGamesAsync(SearchQuery, SearchCancellationTokenSource.Token)
+                : SteamGamesFetcher.SearchGamesAsync(SearchQuery, SearchCancellationTokenSource.Token);
+
+            await foreach (var game in games)
+            {
+                SearchResults.Add(game);
+                await InvokeAsync(StateHasChanged);
+            }
+            
+            if (SearchResults.Any())
+            {
+                await ScrollToSearchResults();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Search was cancelled, this is expected
+        }
+        catch (Exception ex)
+        {
+            SearchErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsSearching = false;
+            IsDeepSearch = false;
+        }
+    }
+
+    private async Task ToggleGameSelection(Game game)
+    {
+        if (SelectedGame?.Id != game.Id)
+        {
+            await SelectedGameChanged.InvokeAsync(game);
+        }
+    }
+
+    private async Task ScrollToSearchResults()
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("scrollToElement", "search-results");
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    public void Dispose()
+    {
+        SearchCancellationTokenSource?.Cancel();
+        SearchCancellationTokenSource?.Dispose();
+    }
+}
