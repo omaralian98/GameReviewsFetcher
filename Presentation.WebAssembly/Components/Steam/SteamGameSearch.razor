@@ -13,17 +13,17 @@
         <EditForm Model="@this" OnValidSubmit="@(() => SearchGames(false))">
             <DataAnnotationsValidator />
             <div class="row">
-                <div class="col-md-8">
-                    <InputText id="searchInput" @bind-Value="SearchQuery" class="form-control" placeholder="Enter game name to search..." 
+                <div class="col-md-8 mt-2">
+                    <InputText @ref="_inputText" id="searchInput" @bind-Value="SearchQuery" class="form-control" placeholder="Enter game name to search..." 
                                disabled="@IsSearching" />
                     <ValidationMessage For="@(() => SearchQuery)" />
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-2 mt-2">
                     <button type="submit" class="btn btn-primary w-100" disabled="@IsSearching">
                         @(IsSearching && !IsDeepSearch ? "Searching..." : "Search")
                     </button>
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-2 mt-2">
                     <button type="button" @onclick="() => SearchGames(true)" class="btn btn-success w-100" disabled="@IsSearching">
                         @(IsSearching && IsDeepSearch ? "Deep Searching..." : "Deep Search")
                     </button>
@@ -91,6 +91,19 @@
     private bool IsDeepSearch { get; set; } = false;
     private string? SearchErrorMessage { get; set; } = string.Empty;
     private CancellationTokenSource SearchCancellationTokenSource { get; set; } = new();
+
+    private InputText _inputText;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (_inputText?.Element != null)
+            {
+                await _inputText.Element.Value.FocusAsync();
+            }
+        }
+    }
 
     private async Task SearchGames(bool isDeepSearch)
     {

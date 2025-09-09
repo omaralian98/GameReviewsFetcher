@@ -32,6 +32,30 @@ html, body {
     cursor: grabbing;
 }
 
+.draggable-item.source {
+    border: 2px solid #28a745; 
+    background-color: #e8f5e9; 
+    box-shadow: 0 0 6px rgba(40, 167, 69, 1); 
+}
+
+.draggable-item.target {
+    border: 2px solid #ffc107;
+    background-color: #fff8e1; 
+    box-shadow: 0 0 6px rgba(255, 193, 7, 1); 
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+
+.draggable-item.source,
+.draggable-item.target{
+    animation: pulse 0.6s ease;
+}
+
+
 /* Modal Customization Styles */
 .modal-xl {
     max-width: 95%;

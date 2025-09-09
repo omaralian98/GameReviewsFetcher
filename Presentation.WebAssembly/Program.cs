@@ -28,13 +28,9 @@ namespace Presentation.WebAssembly
             
             
             
-            builder.Services.AddTransient<DefaultCsvExportService>();
-            builder.Services.AddTransient<DefaultJsonExportService>();
-            builder.Services.AddTransient<DefaultExcelExportService>();
-            
-            builder.Services.AddTransient<SteamDefaultCsvExportService>();
-            builder.Services.AddTransient<SteamDefaultJsonExportService>();
-            builder.Services.AddTransient<SteamDefaultExcelExportService>();
+            builder.Services.AddTransient<CsvExportService>();
+            builder.Services.AddTransient<JsonExportService>();
+            builder.Services.AddTransient<ExcelExportService>();
             
             builder.Services.AddSingleton<IStoreExportServiceFactory, StoreExportServiceFactory>();
             

@@ -73,26 +73,26 @@
                     @if (!string.IsNullOrEmpty(ReviewSummary.ReviewScoreDescription))
                     {
                         <div class="mt-2 text-center">
-                            <span class="badge bg-secondary">@ReviewSummary.ReviewScoreDescription</span>
+                            <span class="badge bg-info bg-gradient">@ReviewSummary.ReviewScoreDescription</span>
                         </div>
                     }
                 </div>
             </div>
         }
         
-        <div class="mb-3">
-            <button @onclick="FetchReviews" class="btn btn-primary me-2" disabled="@(IsLoading || SelectedGame == null)">
-                @(IsLoading ? "Fetching..." : "Fetch Reviews")
+        <div class="d-flex flex-row flex-wrap gap-2 mb-3">
+            <button @onclick="FetchReviews" class="btn btn-primary" disabled="@(IsLoading || SelectedGame == null)">
+                @(IsLoading ? "Fetching..." : GameReviews.Count > 0 ? "Re-Fetch Reviews" : "Fetch Reviews")
             </button>
             
             @if (IsCancelable)
             {
-                <button @onclick="Cancel" class="btn btn-secondary me-2">Cancel</button>
+                <button @onclick="Cancel" class="btn btn-secondary">Cancel</button>
             }
             
-            @if (GameReviews.Any())
+            @if (GameReviews.Any() && !IsLoading)
             {
-                <button @onclick="OpenCustomizationModal" class="btn btn-outline-primary me-2">
+                <button @onclick="OpenCustomizationModal" class="btn btn-outline-primary">
                     <i class="bi bi-gear me-2"></i>Customize Export
                 </button>
                 <button @onclick="ExportReviews" class="btn btn-success" disabled="@IsExporting">
@@ -121,10 +121,10 @@
 }
 
 @* Reviews display is hidden - data is fetched for export only *@
-@if (GameReviews.Any())
+@if (GameReviews.Any() && !IsLoading)
 {
     <div class="alert alert-success">
-        <i class="bi bi-check-circle-fill me-2"></i>
+        <i class="bi bi-check-circle-fill ms-2"></i>
         <strong>@GameReviews.Count reviews fetched successfully!</strong> Click "Customize Export" to configure your export options, then click "Export" to download the data.
     </div>
     
@@ -146,7 +146,7 @@
     private bool IsExporting { get; set; } = false;
     private CancellationTokenSource CancellationTokenSource { get; set; } = new CancellationTokenSource();
 
-    private SteamExportOptions ExportOptions { get; set; } = new SteamExportOptions();
+    private ExportOptions ExportOptions { get; set; } = new ExportOptions();
     
     
     protected override async Task OnParametersSetAsync()
@@ -166,6 +166,7 @@
         {
             ErrorMessage = null;
             IsLoadingSummary = true;
+            GameReviews.Clear();
             await InvokeAsync(StateHasChanged);
             
             var parameters = new SteamReviewQueryParameters

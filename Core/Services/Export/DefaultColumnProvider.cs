@@ -1,5 +1,4 @@
 ﻿using Core.Contracts;
-using Core.Enums;
 using Core.Models;
 using Core.Models.Export;
 
@@ -7,7 +6,6 @@ namespace Core.Services.Export;
 
 public class DefaultColumnProvider : IStoreColumnProvider
 {
-    public Store Store { get; } = Store.Default;
     public Task<List<ExportColumn>> GetAvailableColumnsAsync()
     {
         return Task.FromResult<List<ExportColumn>>
@@ -15,11 +13,11 @@ public class DefaultColumnProvider : IStoreColumnProvider
             [
                 new ExportColumn()
                 {
-                    Key = nameof(ExportColumn.Index),
+                    Key = nameof(ExportColumn.Order),
                     DisplayName = "Index",
                     Description = "Sequential number",
                     IsDefault = true,
-                    Index = 1,
+                    Order = 1,
                     DataType = "number"
                 },
                 new ExportColumn()
@@ -28,7 +26,7 @@ public class DefaultColumnProvider : IStoreColumnProvider
                     DisplayName = "Game ID",
                     Description = "Game ID",
                     IsDefault = true,
-                    Index = 2,
+                    Order = 2,
                     DataType = "string"
                 },
                 new ExportColumn()
@@ -37,7 +35,7 @@ public class DefaultColumnProvider : IStoreColumnProvider
                     DisplayName = "Game Name",
                     Description = "Game name",
                     IsDefault = true,
-                    Index = 3,
+                    Order = 3,
                     DataType = "string"
                 },
                 new ExportColumn
@@ -46,19 +44,21 @@ public class DefaultColumnProvider : IStoreColumnProvider
                     DisplayName = "Review Text", 
                     Description = "The actual review content",
                     IsDefault = true, 
-                    Index = 4, 
+                    Order = 4, 
                     DataType = "string"
                 },
             ]
         );
     }
 
-    public Task<object> GetColumnValueAsync(Game game, Review review, string columnKey)
+    public Task<List<ExportColumn>> GetGroupableColumnsAsync() => Task.FromResult<List<ExportColumn>>([]); 
+
+    public Task<object> GetColumnValueAsync(Game game, Review review, ExportColumn column)
     {
         return Task.FromResult<object>(
-            columnKey switch
+            column.Key switch
             {
-                nameof(ExportColumn.Index) => columnKey,
+                nameof(ExportColumn.Order) => column.Key,
                 nameof(Game.Id) => game.Id,
                 nameof(Game.Name) => game.Name,
                 nameof(Review.ReviewText) => review.ReviewText,

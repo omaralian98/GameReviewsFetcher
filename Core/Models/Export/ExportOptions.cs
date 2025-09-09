@@ -8,6 +8,8 @@ public class ExportOptions
     public string? FileName { get; set; }
     public bool IncludeHeaders { get; set; } = true;
     public string DateFormat { get; set; } = "yyyy-mm-dd hh:mm:ss";
-    public List<ExportColumnSelection> SelectedColumns { get; set; } = [];
+    public bool ExportGroupsInSeparateFiles { get; set; } = false;
     public ExcelFormatOptions ExcelFormatOptions { get; set; } = new();
+    public List<ExportColumnSelection> SelectedColumns { get; set; } = [];
+    public List<ExportColumn> GroupedByColumns { get; set; } = [];
 }

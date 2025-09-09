@@ -10,13 +10,13 @@
             <div class="col-md-8">
                 <label for="storeSelect" class="form-label fw-bold">Choose a store:</label>
                 <InputSelect id="storeSelect" @bind-Value="SelectedStore" @bind-Value:after="Select" class="form-select form-select-lg">
-                    <option value="" selected="@SelectedStore == Store.Default">-- Select Store --</option>
-                    <option value="Steam">Steam</option>
+                    <option>-- Select Store --</option>
+                    <option value="@Store.Steam">Steam</option>
                 </InputSelect>
             </div>
         </div>
         
-        @if (SelectedStore != Store.Default)
+        @if (SelectedStore is not null)
         {
             <div class="mt-4">
                 <div class="alert alert-success d-flex align-items-center">
@@ -37,8 +37,8 @@
 </div>
 
 @code {
-    [Parameter] public Store SelectedStore { get; set; } = Store.Default;
-    [Parameter] public EventCallback<Store> SelectedStoreChanged { get; set; }
+    [Parameter] public Store? SelectedStore { get; set; }
+    [Parameter] public EventCallback<Store?> SelectedStoreChanged { get; set; }
 
     async Task Select()
     {

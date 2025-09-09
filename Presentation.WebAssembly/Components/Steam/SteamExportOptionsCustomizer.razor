@@ -3,7 +3,7 @@
 @inject IJSRuntime JsRuntime
 
 <!-- Modal -->
-<div class="modal fade" id="exportCustomizationModal" tabindex="-1" aria-labelledby="exportCustomizationModalLabel" aria-hidden="true">
+<div class="modal fade" id="exportCustomizationModal" tabindex="-1" aria-labelledby="exportCustomizationModalLabel">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
@@ -55,7 +55,7 @@
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var (column, index) in ExportOptions.SelectedColumns.Select((c, i) => (c, i)))
                                         {
-                                            <div class="d-flex align-items-center p-2 border rounded bg-light draggable-item" 
+                                            <div class="d-flex align-items-center p-2 border rounded bg-light draggable-item @(LastDraggedIndex == index ? "source" : "") @(LastTargetedIndex == index ? "target" : "")" 
                                                  draggable="true" 
                                                  data-index="@index"
                                                  @ondragstart="@(() => OnDragStart(index))"
@@ -63,7 +63,26 @@
                                                  @ondrop="@(() => OnDrop(index))">
                                                 <i class="bi bi-grip-vertical me-2 text-muted drag-handle"></i>
                                                 <span class="me-2 text-muted order-number">@(index + 1)</span>
-                                                <span class="flex-grow-1">@column.DisplayName</span>
+                                                @if (EditingKey == column.Key)
+                                                {
+                                                    <InputText 
+                                                        @ref="EditDisplayNameInput"
+                                                        class="form-control form-control-sm flex-grow-1"
+                                                        @bind-Value="@EditingDisplayName"
+                                                        @oninput="(e => EditingDisplayName = e.Value?.ToString() ?? string.Empty)"
+                                                        @onkeydown="(e) => OnEditKeyDown(e, column)"
+                                                        @onblur="() => CommitEditing(column)"
+                                                        @onclick:stopPropagation="true"
+                                                        @ondblclick:stopPropagation="true" />
+                                                }
+                                                else
+                                                {
+                                                    <span class="flex-grow-1"
+                                                          title="Double-click to rename"
+                                                          @ondblclick="@(() => StartEditing(column))">
+                                                        @column.DisplayName
+                                                    </span>
+                                                }
                                                 <button type="button" class="btn btn-sm btn-outline-danger ms-2" 
                                                         @onclick="@(() => RemoveColumn(column.Key))">
                                                     <i class="bi bi-x"></i>
@@ -268,24 +287,9 @@
                         <h6>Review Separation Options:</h6>
                         <div class="row">
                             <div class="col-md-6">
-                                @foreach (var mode in Enum.GetValues<ReviewSeparationMode>())
-                                {
-                                    var modeId = $"reviewSeparation_{mode}";
-                                    var modeLabel = mode switch
-                                    {
-                                        ReviewSeparationMode.Single => "Single file with all reviews",
-                                        ReviewSeparationMode.Separate => "Separate files (positive/negative)",
-                                        ReviewSeparationMode.Sheets => "Same file, separate sheets",
-                                        _ => mode.ToString()
-                                    };
-                                    
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="reviewSeparation" id="@modeId" @onchange="@(() => ExportOptions.ReviewSeparationMode = mode)" checked="@(ExportOptions.ReviewSeparationMode == mode)" />
-                                        <label class="form-check-label" for="@modeId">
-                                            @modeLabel
-                                        </label>
-                                    </div>
-                                }
+                                <div class="form-check">
+                                    <InputCheckbox class="form-check-input" @bind-Value="ExportOptions.ExportGroupsInSeparateFiles" id="ExportGroupsInSeparateFiles" DisplayName="Separate files"></InputCheckbox>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -310,8 +314,8 @@
     [Parameter] public List<Review> Reviews { get; set; } = [];
     [Parameter] public Game? SelectedGame { get; set; }
 
-    [Parameter] public SteamExportOptions ExportOptions { get; set; } = new();
-    [Parameter] public EventCallback<SteamExportOptions> ExportOptionsChanged { get; set; }
+    [Parameter] public ExportOptions ExportOptions { get; set; } = new();
+    [Parameter] public EventCallback<ExportOptions> ExportOptionsChanged { get; set; }
     
     private List<ExportColumn> AvailableColumns { get; set; } = [];
 
@@ -321,6 +325,12 @@
     
     
     private int DraggedIndex { get; set; } = -1;
+    private int LastDraggedIndex { get; set; } = -1;
+    private int LastTargetedIndex { get; set; } = -1;
+    
+    private InputText EditDisplayNameInput;
+    private string? EditingKey { get; set; }
+    private string EditingDisplayName { get; set; } = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -334,8 +344,6 @@
         {
             await GeneratePreview();
         }
-
-        ExportOptions.ExcelFormatOptions ??= new ExcelFormatOptions();
     }
 
     private async Task LoadAvailableColumns()
@@ -345,7 +353,7 @@
         
         var defaultColumns = AvailableColumns
             .Where(c => c.IsDefault)
-            .OrderBy(c => c.Index)
+            .OrderBy(c => c.Order)
             .ToList();
         
         ExportOptions.SelectedColumns = defaultColumns
@@ -354,7 +362,7 @@
                 Key = c.Key,
                 DisplayName = c.DisplayName,
                 IsSelected = true,
-                Order = c.Index,
+                Order = c.Order,
                 DataType = c.DataType
             })
             .ToList();
@@ -446,24 +454,82 @@
     {
         if (DraggedIndex >= 0 && DraggedIndex != targetIndex)
         {
-            var draggedItem = ExportOptions.SelectedColumns[DraggedIndex];
-            ExportOptions.SelectedColumns.RemoveAt(DraggedIndex);
-            
-            var newIndex = targetIndex > DraggedIndex ? targetIndex - 1 : targetIndex;
-            ExportOptions.SelectedColumns.Insert(newIndex, draggedItem);
-            
-            // Update order numbers
-            for (int i = 0; i < ExportOptions.SelectedColumns.Count; i++)
+            try
             {
-                ExportOptions.SelectedColumns[i].Order = i + 1;
+                (ExportOptions.SelectedColumns[DraggedIndex], ExportOptions.SelectedColumns[targetIndex]) = (ExportOptions.SelectedColumns[targetIndex], ExportOptions.SelectedColumns[DraggedIndex]);
+                LastDraggedIndex = DraggedIndex;
+                LastTargetedIndex = targetIndex;
+                for (int i = 0; i < ExportOptions.SelectedColumns.Count; i++)
+                {
+                    ExportOptions.SelectedColumns[i].Order = i + 1;
+                }
             }
-            
-            if (Reviews.Any() && SelectedGame != null)
+            catch
             {
-                await GeneratePreview();
             }
+                //This is the logic of reorder
+            // var draggedItem = ExportOptions.SelectedColumns[DraggedIndex];
+            // ExportOptions.SelectedColumns.RemoveAt(DraggedIndex);
+            //
+            // int newIndex = targetIndex > DraggedIndex ? targetIndex - 1 : targetIndex;
+            // ExportOptions.SelectedColumns.Insert(newIndex, draggedItem);
+            //
+            // // Update order numbers
+            // for (int i = 0; i < ExportOptions.SelectedColumns.Count; i++)
+            // {
+            //     ExportOptions.SelectedColumns[i].Order = i + 1;
+            // }
         }
+
         DraggedIndex = -1;
+    }
+
+    private async Task StartEditing(ExportColumnSelection column)
+    {
+        EditingKey = column.Key;
+        EditingDisplayName = column.DisplayName;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(TimeSpan.FromSeconds(0.2));
+        if (EditDisplayNameInput?.Element != null)
+        {
+            await EditDisplayNameInput.Element.Value.FocusAsync();
+        }
+    }
+
+    private async Task CommitEditing(ExportColumnSelection column)
+    {
+        if (EditingKey == column.Key)
+        {
+            string newName = EditingDisplayName.Trim();
+            if (!string.IsNullOrEmpty(newName))
+            {
+                column.DisplayName = newName;
+            }
+            EditingKey = null;
+            EditingDisplayName = string.Empty;
+            
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CancelEditing()
+    {
+        EditingKey = null;
+        EditingDisplayName = string.Empty;
+    }
+
+    private async Task OnEditKeyDown(KeyboardEventArgs e, ExportColumnSelection column)
+    {
+        switch (e.Key)
+        {
+            case "Enter" or "NumpadEnter":
+                await CommitEditing(column);
+                break;
+            case "Escape":
+                CancelEditing();
+                StateHasChanged();
+                break;
+        }
     }
 
     private async Task GeneratePreview()
@@ -488,8 +554,13 @@
 
     private async Task ApplyCustomization()
     {
+        ExportOptions.GroupedByColumns =
+        [
+            ExportOptions.SelectedColumns.First(x => x.Key == nameof(SteamReview.ReceivedForFree)),
+        ];
         await ExportOptionsChanged.InvokeAsync(ExportOptions);
-        
+        await JsRuntime.InvokeVoidAsync("console.log", string.Join(',', ExportOptions.SelectedColumns.Select(x => x.Order)));
+
         // Close modal
         await JsRuntime.InvokeVoidAsync("closeModal", "exportCustomizationModal");
     }

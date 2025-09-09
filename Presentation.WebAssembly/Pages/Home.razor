@@ -15,9 +15,6 @@
 
     @switch (SelectedStore)
     {
-        case Store.Default:
-            <p>Please select a store</p>
-            break;
         case Store.Steam:
             <SteamPage></SteamPage>
             break;
@@ -28,5 +25,5 @@
 </div>
 
 @code {
-    private Store SelectedStore { get; set; } = Store.Default;
+    private Store? SelectedStore { get; set; } = null;
 }

@@ -18,13 +18,9 @@ public class StoreExportServiceFactory(
 
         return (store, format) switch
         {
-            (Store.Steam, ExportFormat.Csv) => ActivatorUtilities.CreateInstance<SteamDefaultCsvExportService>(serviceProvider, columnProvider, serviceProvider.GetRequiredService(typeof(ILogger<StoreExportServiceFactory>))),
-            (Store.Steam, ExportFormat.Json) => ActivatorUtilities.CreateInstance<SteamDefaultJsonExportService>(serviceProvider, columnProvider),
-            (Store.Steam, ExportFormat.Excel) => ActivatorUtilities.CreateInstance<SteamDefaultExcelExportService>(serviceProvider, columnProvider),
-
-            (_, ExportFormat.Csv) => ActivatorUtilities.CreateInstance<DefaultCsvExportService>(serviceProvider, columnProvider, serviceProvider.GetRequiredService(typeof(ILogger<StoreExportServiceFactory>))),
-            (_, ExportFormat.Json) => ActivatorUtilities.CreateInstance<DefaultJsonExportService>(serviceProvider, columnProvider),
-            (_, ExportFormat.Excel) => ActivatorUtilities.CreateInstance<DefaultExcelExportService>(serviceProvider, columnProvider),
+            (_, ExportFormat.Csv) => ActivatorUtilities.CreateInstance<CsvExportService>(serviceProvider, columnProvider, serviceProvider.GetRequiredService(typeof(ILogger<StoreExportServiceFactory>))),
+            (_, ExportFormat.Json) => ActivatorUtilities.CreateInstance<JsonExportService>(serviceProvider, columnProvider),
+            (_, ExportFormat.Excel) => ActivatorUtilities.CreateInstance<ExcelExportService>(serviceProvider, columnProvider),
 
             _ => await GetService(format)
         };
@@ -36,9 +32,9 @@ public class StoreExportServiceFactory(
 
         return format switch
         {
-            ExportFormat.Csv => ActivatorUtilities.CreateInstance<DefaultCsvExportService>(serviceProvider, columnProvider),
-            ExportFormat.Json => ActivatorUtilities.CreateInstance<DefaultJsonExportService>(serviceProvider, columnProvider),
-            ExportFormat.Excel => ActivatorUtilities.CreateInstance<DefaultExcelExportService>(serviceProvider, columnProvider),
+            ExportFormat.Csv => ActivatorUtilities.CreateInstance<CsvExportService>(serviceProvider, columnProvider),
+            ExportFormat.Json => ActivatorUtilities.CreateInstance<JsonExportService>(serviceProvider, columnProvider),
+            ExportFormat.Excel => ActivatorUtilities.CreateInstance<ExcelExportService>(serviceProvider, columnProvider),
 
             _ => throw new NotSupportedException($"Export format {format} is not supported.")
         };
